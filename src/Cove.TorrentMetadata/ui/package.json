@@ -11,8 +11,8 @@
   },
   "devDependencies": {
     "@types/react": "^19.0.0",
-    "esbuild": "^0.25.0",
-    "typescript": "^5.7.0",
-    "vitest": "^4.1.10"
+    "esbuild": "^0.28.2",
+    "typescript": "^7.0.2",
+    "vitest": "^4.1.11"
   }
 }

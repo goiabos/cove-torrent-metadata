@@ -34,7 +34,7 @@ jobs:
     steps:
       # Checked out into a subdirectory so Cove can sit beside it: Directory.Build.props probes for
       # a sibling named `cove`, and the extension does not compile without it.
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           path: cove-torrent-metadata
 
@@ -53,10 +53,10 @@ jobs:
 
       - uses: ./cove-torrent-metadata/.github/actions/cove-checkout
 
-      - uses: actions/setup-dotnet@v5
+      - uses: actions/setup-dotnet@v6
         with:
           dotnet-version: "10.0.x"
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: "22"
           cache: npm
