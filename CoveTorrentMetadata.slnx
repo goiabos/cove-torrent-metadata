@@ -1,0 +1,4 @@
+<Solution>
+  <Project Path="src/Cove.TorrentMetadata/Cove.TorrentMetadata.csproj" />
+  <Project Path="tests/Cove.TorrentMetadata.Tests.csproj" />
+</Solution>

@@ -1,0 +1,37 @@
+# Build output
+bin/
+obj/
+
+# Frontend build output and dependencies. Both unanchored: a pattern with a separator in the
+# middle is relative to this file's directory, so `ui/node_modules/` stopped matching once the
+# frontend moved under src/.
+dist-ui/
+node_modules/
+
+# Editor / OS noise
+.vs/
+.idea/
+*.user
+.DS_Store
+
+# Release output
+artifacts/
+
+# ---------------------------------------------------------------------------
+# Torrents are NEVER committed to this repo. Not one, not stripped, not renamed.
+#
+# They are the tracker's data, not ours: the tag lists, titles and filenames are the most
+# identifying artefact in the project, and git history cannot be un-published if this
+# repo is ever opened up or rebranded. Contributors bring their own corpus, and no
+# test may depend on a specific torrent.
+#
+# ci.yml fails the build if a .torrent is ever tracked, because .gitignore is a default
+# rather than a guarantee — `git add -f` walks straight through it.
+# ---------------------------------------------------------------------------
+*.torrent
+# Both spellings deliberately. `/resources/` matches only a real directory, so a *symlink*
+# to a corpus elsewhere — the supported way to point the audit at one — slips past it and
+# shows up as untracked. The bare form catches that.
+/resources
+/resources/
+

@@ -1,0 +1,105 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    The extension's own test project.
+
+    These tests used to exist only as copies: the originals lived in a Cove checkout's
+    src/Cove.Tests/, built by adding a ProjectReference to Cove.TorrentMetadata into Cove.Tests.csproj and a
+    Project entry into Cove.slnx. Both of those are files Cove owns, so the wiring had to be kept
+    permanently unstaged, and the copies here could drift from the originals with nothing to
+    detect it.
+
+    Nothing forced that arrangement — the fixtures turned out to be self-contained. Every test
+    file builds its own CoveContext on in-memory SQLite through a private CreateContext(), and the
+    endpoint tests drive a raw WebHostBuilder rather than Cove's host, so the only thing the Cove
+    test project ever supplied was xunit itself.
+  -->
+
+  <!--
+    The two corpus canaries assert what a real tracker actually emits, so they need real torrents — and no
+    torrent is committed here. They are excluded from a default run rather than skipped:
+    xunit v2 has no working dynamic skip (`Assert.Skip` is v3), and a test that quietly returns is
+    the exact failure this rule exists to remove — sixteen of them passed for weeks while doing nothing.
+
+    Excluded, they do not appear in the run at all, which cannot be mistaken for a pass. Asked for
+    explicitly they fail loudly when TORRENT_CORPUS_DIR is unset.
+
+    A filter argument on the command line overrides this property, which is how you run them.
+    tests/README.md has the exact command.
+  -->
+  <PropertyGroup>
+    <VSTestTestCaseFilter>Category!=Corpus</VSTestTestCaseFilter>
+  </PropertyGroup>
+
+  <PropertyGroup>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+    <RootNamespace>Cove.TorrentMetadata.Tests</RootNamespace>
+    <!-- The tests are not shipped, so the Release scrub in Directory.Build.props (DebugType none)
+         is unwanted here: a failing test with no line numbers is much harder to read. -->
+    <DebugType>portable</DebugType>
+  </PropertyGroup>
+
+  <!-- The test files carry no `using Xunit;`. They inherited that from Cove.Tests.csproj, which
+       supplied it as a global using, and this item is what replaces it now that the tests are their
+       own project. The old justification — keeping the files diffable against the copies they were
+       cut from — died with those copies; the item stays on the plainer merit that it is one
+       line here against a using in each of fifteen files. -->
+  <ItemGroup>
+    <Using Include="Xunit" />
+  </ItemGroup>
+
+  <!-- The endpoint tests map the extension's endpoints onto a TestServer, which needs the shared
+       framework as well as the TestHost package. -->
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="18.8.1" />
+    <PackageReference Include="xunit" Version="2.9.3" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="3.1.5" />
+    <PackageReference Include="coverlet.collector" Version="10.0.1" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" Version="10.0.10" />
+    <PackageReference Include="Microsoft.AspNetCore.TestHost" Version="10.0.10" />
+  </ItemGroup>
+
+  <!--
+    Pinned directly to override the 2.1.11 that Microsoft.EntityFrameworkCore.Sqlite resolves
+    transitively (through SQLitePCLRaw.bundle_e_sqlite3). 2.1.11 carries a high-severity advisory —
+    GHSA-2m69-gcr7-jv3q, vulnerable range `<= 2.1.11` — and printed NU1903 on every build of this
+    repo, including a plain `dotnet test`.
+
+    Nothing here is shipped: the extension does not reference EF Core's Sqlite provider, and this
+    package reaches only the test project, which uses in-memory SQLite for CoveContext. The pin is
+    for the reader, not the runtime — a contributor cloning a public repo should not have a
+    high-severity advisory scroll past on their first build with no way to tell it is test-only and
+    known.
+
+    Deliberately not fixed by bumping Microsoft.EntityFrameworkCore.Sqlite instead: 10.0.10 matches
+    the pin in the Cove checkout's Cove.Data.csproj, and diverging from the host we compile against
+    buys nothing here.
+  -->
+  <ItemGroup>
+    <PackageReference Include="SQLitePCLRaw.lib.e_sqlite3" Version="2.1.13" />
+  </ItemGroup>
+
+  <!--
+    Cove.Data is referenced directly rather than leant on transitively. Cove.TorrentMetadata deliberately
+    strips the host-provided assemblies from its own output (Cove.Sdk.targets), so relying on it
+    to carry CoveContext here would compile and then fail at runtime with a missing assembly.
+    $(CoveSrc) is resolved by Directory.Build.props, which also errors with instructions when no
+    Cove checkout is found.
+  -->
+  <ItemGroup>
+    <ProjectReference Include="../src/Cove.TorrentMetadata/Cove.TorrentMetadata.csproj" />
+    <ProjectReference Include="$(CoveSrc)Cove.Data/Cove.Data.csproj" />
+  </ItemGroup>
+
+  <!-- The extension builds its UI bundle on every build. The tests never touch it, and running it
+       once per test run is pure latency. -->
+  <PropertyGroup>
+    <SkipExtensionUiBuild>true</SkipExtensionUiBuild>
+  </PropertyGroup>
+
+</Project>

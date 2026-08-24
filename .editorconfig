@@ -1,0 +1,39 @@
+# Encodes what this repo's code already does, so an editor that reformats on save agrees with it
+# instead of turning a contributor's first PR into whitespace noise.
+#
+# This is not a style manifesto. Every rule below was read off the existing sources rather than
+# chosen, and the counts that justify the two contested ones are in the comments. Nothing here runs
+# at build time: the IDE analyzers these severities address are off unless EnforceCodeStyleInBuild
+# is set, which it is not, so a rule that turns out to be wrong misformats a file — it cannot fail
+# a build.
+
+root = true
+
+[*]
+charset = utf-8
+end_of_line = lf
+indent_style = space
+insert_final_newline = true
+trim_trailing_whitespace = true
+
+[*.cs]
+indent_size = 4
+
+# File-scoped, in every source and test file without exception (52 at the last count). This one is a warning rather than
+# a suggestion because the block form is not merely a second opinion here — reintroducing it
+# re-indents an entire file, and the diff hides whatever the change was actually for.
+csharp_style_namespace_declarations = file_scoped:warning
+
+# `var` is near-universal: 183 uses against 2 explicit declarations. A suggestion rather than a
+# warning, because those 2 are deliberate.
+csharp_style_var_for_built_in_types = true:suggestion
+csharp_style_var_when_type_is_apparent = true:suggestion
+csharp_style_var_elsewhere = true:suggestion
+
+[*.{ts,tsx,js,mjs,json,yml,yaml}]
+indent_size = 2
+
+[*.md]
+indent_size = 2
+# Two trailing spaces are a hard line break in Markdown, so stripping them changes the rendering.
+trim_trailing_whitespace = false

@@ -1,0 +1,99 @@
+name: Package extension
+
+# Tag-driven, plus manual runs for checking a build without cutting a release.
+on:
+  workflow_dispatch:
+    inputs:
+      cove_ref:
+        description: "Cove ref to build against — branch, tag or SHA. Empty uses the pin below."
+        default: ""
+  push:
+    tags: ["v*"]
+
+# Nothing by default, and the write scope granted on the job that needs it. With one job today the
+# two forms are equivalent; the point is what happens to the second job somebody adds later, which
+# under a file-level grant would silently inherit a token that can push to this repository.
+permissions: {}
+
+jobs:
+  package:
+    runs-on: ubuntu-latest
+    # `contents: write` is for the release step alone — creating the release and uploading the ZIP.
+    # Permissions are per job rather than per step, so this is as narrow as the token gets without
+    # splitting the release into a second job that re-downloads the artifact.
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          path: cove-torrent-metadata
+
+      # This extension compiles against Cove.Sdk AND Cove.Data, and Cove.Data is published to no
+      # NuGet feed, so CI cannot restore it — a Cove checkout has to be on disk. It goes beside this
+      # repo, the first location Directory.Build.props probes for. The pinned revision and the
+      # reasoning behind pinning live in the action.
+      - name: Check out Cove
+        uses: ./cove-torrent-metadata/.github/actions/cove-checkout
+        with:
+          ref: ${{ inputs.cove_ref }}
+
+      - uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: "10.0.x"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      # A tag must not be able to publish over a red suite. CI runs these on every push, but
+      # a tag push skips CI, so the gate has to exist here too — and it belongs before packaging
+      # regardless, so a failure costs nothing further.
+      - name: Tests
+        working-directory: cove-torrent-metadata
+        run: dotnet test tests/Cove.TorrentMetadata.Tests.csproj --logger "console;verbosity=normal"
+
+      # esbuild strips types without checking them, so this is the only frontend type gate — and it
+      # sees shapes, not what the browser decides to send, which is what the vitest suite covers.
+      - name: Frontend typecheck and tests
+        working-directory: cove-torrent-metadata/src/Cove.TorrentMetadata/ui
+        run: |
+          npm ci
+          npm run typecheck
+          npm test
+
+      # Builds the frontend, publishes, and refuses to package if the output carries host-provided
+      # assemblies, symbols, or anything identifying. See scripts/package.sh.
+      - name: Package
+        working-directory: cove-torrent-metadata
+        run: bash scripts/package.sh
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: extension-zip
+          path: cove-torrent-metadata/artifacts/*.zip
+          if-no-files-found: error
+
+      # The manifest version is the one that matters — the tag only triggers the run. A mismatch
+      # means someone tagged without bumping extension.json.
+      - name: Check the tag matches the manifest
+        if: startsWith(github.ref, 'refs/tags/')
+        working-directory: cove-torrent-metadata
+        run: |
+          manifest=$(python3 -c "import json;print(json.load(open('src/Cove.TorrentMetadata/extension.json'))['version'])")
+          tag="${GITHUB_REF#refs/tags/v}"
+          [ "$manifest" = "$tag" ] || { echo "tag v$tag != extension.json $manifest"; exit 1; }
+
+      # Pinned by commit, not by `v3`. This is the one third-party action in this repo, it is the one
+      # step that holds a write token, and a major-version tag is a pointer its owner can move — so
+      # `@v3` means "whatever that repository's maintainer points it at on the day a tag is pushed
+      # here", which is the shape every actions supply-chain compromise has taken. The SHA is what
+      # makes an update a reviewed change rather than an event; `.github/dependabot.yml` is what
+      # stops the pin rotting, and rewrites the trailing comment along with the SHA.
+      #
+      # The `actions/*` steps above stay on major tags deliberately, and the line is drawn at
+      # ownership: they are GitHub's own, published from the org that also runs the runner, so a pin
+      # there buys nothing an attacker who owned that org could not take anyway.
+      - uses: softprops/action-gh-release@3d0d9888cb7fd7b750713d6e236d1fcb99157228 # v3.0.2
+        if: startsWith(github.ref, 'refs/tags/')
+        with:
+          files: cove-torrent-metadata/artifacts/*.zip
+          generate_release_notes: true

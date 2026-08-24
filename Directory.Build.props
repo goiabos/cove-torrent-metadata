@@ -1,0 +1,112 @@
+<Project>
+
+  <!--
+    This file exists to stop MSBuild walking further up.
+
+    Without it the nearest Directory.Build.props/.targets is Cove's own, because this repo is
+    cloned inside a Cove checkout — so Cove's versioning targets decided this package's assembly
+    version, which is why `dotnet build` here used to print Cove's "Cove version: …" line. Our
+    output must not depend on where the repo happens to sit on disk.
+
+    It deliberately does NOT import the parent: that inheritance is the thing being cut.
+  -->
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+  <!--
+    The assembly version is read out of extension.json rather than repeated here.
+
+    The manifest is the single source of truth for id, name and version, and the
+    release procedure bumps only that file — so a literal here is a second copy that nothing
+    updates and nothing compares. Left alone it would have shipped a stale assembly version from
+    the first release onwards, silently, because no gate reads it.
+
+    Regex rather than a JSON parser because MSBuild has no JSON support and this needs to be a
+    property, evaluated before any target runs. It is pinned by a test that parses the manifest
+    properly and compares, so the crude read cannot drift from the real value unnoticed.
+  -->
+  <PropertyGroup>
+    <CoveExtensionManifest>$(MSBuildThisFileDirectory)src/Cove.TorrentMetadata/extension.json</CoveExtensionManifest>
+    <Version>$([System.Text.RegularExpressions.Regex]::Match($([System.IO.File]::ReadAllText('$(CoveExtensionManifest)')), '&quot;version&quot;\s*:\s*&quot;([^&quot;]+)&quot;').Groups.get_Item(1).Value)</Version>
+  </PropertyGroup>
+
+  <!--
+    The compiler-warning gate, scoped to our two projects rather than to the build graph.
+
+    It used to be `-warnaserror` on ci.yml's `dotnet test` command line, which applies to **every**
+    project MSBuild builds — including Cove's, because Cove.Data is on no NuGet feed and so is a
+    ProjectReference into $(CoveSrc). Cove.Data does not compile warning-free (EF1002 in
+    EmbeddingService), so the gate failed on someone else's warning and CI was red for 29 commits
+    without the local loop ever being able to see it. A property here reaches our tree only:
+    Cove's projects find cove/Directory.Build.props first and never import this file.
+
+    It is also why the gate now works locally. An incremental build never recompiles Cove.Data, so
+    the flag was inert on a developer machine and fatal in CI — the exact inversion of what a gate
+    is for.
+
+    NuGet's audit warnings stay demoted, and the exemption has to move here with the gate.
+    `-warnnotaserror` is not usable on its own — MSBuild rejects it unless `-warnaserror` is also
+    given and left empty, which is the graph-wide promotion being removed. So both switches leave
+    ci.yml together.
+
+    That makes `WarningsNotAsErrors` the exemption, which was once recorded as *not working*. It did not,
+    as `-p:WarningsNotAsErrors=NU1903` **underneath a global `-warnaserror`**: the engine switch
+    promotes at logger level and the property never gets a say. With the switch gone the property is
+    the only mechanism in play, NuGet folds it into its own RestoreWarningProperties, and it works —
+    probed against `System.Net.Http` 4.3.0, which carries a real advisory: NU1903 stays a warning
+    here and fails the build when the exemption is removed.
+
+    The audit warnings still print either way. Only the failure goes away, so a new advisory
+    published against a transitive package cannot turn CI red on a day nobody committed.
+  -->
+  <PropertyGroup>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <WarningsNotAsErrors>NU1901;NU1902;NU1903;NU1904</WarningsNotAsErrors>
+  </PropertyGroup>
+
+  <!--
+    A Release build is handed to strangers, and .NET puts build-machine paths in it: the DLL's
+    debug directory records an absolute path to the PDB, and the PDB records the source root. Both
+    carried `/home/<user>/…` — the maintainer's surname — into the shipped ZIP.
+
+    `none` emits no PDB and no debug directory entry; an extension has no need to ship symbols.
+    PathMap rewrites any path the compiler embeds for other reasons, so the scrub does not rest on
+    DebugType alone. Debug builds keep full symbols — only the artifact is stripped.
+  -->
+  <PropertyGroup Condition="'$(Configuration)' == 'Release'">
+    <DebugType>none</DebugType>
+    <PathMap>$(MSBuildThisFileDirectory)=/src/</PathMap>
+  </PropertyGroup>
+
+  <!--
+    Where Cove's sources live. The extension compiles against Cove.Sdk and Cove.Data, and Cove.Data
+    is published to no NuGet feed, so a checkout has to be on disk.
+    Probe for it instead of hardcoding a depth, the way the official template does.
+
+    Two siblings are probed, pinned first. `../cove-<floor>` is a checkout parked at the exact Cove
+    revision this extension is tested and packaged against — the one `minCoveVersion` names and
+    `.github/actions/cove-checkout/action.yml` pins by SHA. `../cove` is whatever a plain clone of
+    Cove happens to be, which is the layout a contributor starts from.
+
+    Pinned first is the point. A checkout that tracks Cove's `main` moves daily, and building
+    against it produces a green build with no relationship to the host anyone runs — silently, which
+    is the one failure a version floor exists to prevent. Preferring the pinned sibling makes the
+    default build the tested one, and leaves the plain `cove` sibling as the fallback for a clone
+    that has no pinned checkout yet.
+
+    Nothing rests on the name alone: `scripts/package.sh` recomputes the checkout's version and
+    refuses to package unless it equals `minCoveVersion` exactly, so an unpinned or stale checkout
+    fails at the gate rather than shipping. The floor number in the directory name moves when
+    `minCoveVersion` does.
+  -->
+  <PropertyGroup>
+    <CoveSrc Condition="'$(CoveSrc)' == '' And Exists('$(MSBuildThisFileDirectory)../cove-131/src/Cove.Sdk/Cove.Sdk.csproj')">$(MSBuildThisFileDirectory)../cove-131/src/</CoveSrc>
+    <CoveSrc Condition="'$(CoveSrc)' == '' And Exists('$(MSBuildThisFileDirectory)../cove/src/Cove.Sdk/Cove.Sdk.csproj')">$(MSBuildThisFileDirectory)../cove/src/</CoveSrc>
+    <CoveSrc Condition="'$(CoveSrc)' == '' And Exists('$(MSBuildThisFileDirectory)../../src/Cove.Sdk/Cove.Sdk.csproj')">$(MSBuildThisFileDirectory)../../src/</CoveSrc>
+  </PropertyGroup>
+
+</Project>

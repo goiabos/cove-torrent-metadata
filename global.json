@@ -1,0 +1,17 @@
+{
+  // Pins the SDK band so a contributor on a .NET 11 preview gets one clear sentence naming the
+  // version this repo wants, instead of a failure somewhere in the middle of a build.
+  //
+  // `latestFeature` rolls forward across feature bands and patches within 10.0 — any 10.0.1xx SDK
+  // satisfies this — and never to 11. The version below is the floor that resolves, not a claim
+  // that 10.0.100 is what gets tested: CI installs the newest 10.0.x and that is what runs.
+  //
+  // This file governs only this repo. The Cove checkout beside it is built from its own directory
+  // and is unaffected, which is why pinning here cannot pin the host we compile against.
+  //
+  // The comments are deliberate and load-bearing — the SDK parses global.json with comments allowed.
+  "sdk": {
+    "version": "10.0.100",
+    "rollForward": "latestFeature"
+  }
+}

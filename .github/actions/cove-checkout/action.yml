@@ -1,0 +1,54 @@
+name: Check out Cove
+description: >
+  Clones the Cove host sources beside this repo, at the revision extension.json's minCoveVersion
+  names. This file is the single source of truth for that pin — it was previously inline in
+  release.yml, which would have meant maintaining a second copy the moment a second workflow
+  needed a checkout.
+
+inputs:
+  ref:
+    description: "Cove ref — branch, tag or commit SHA. Empty uses the pin below."
+    required: false
+    default: ""
+  path:
+    description: "Where to clone, relative to the workspace. Must stay a sibling of this repo."
+    required: false
+    default: cove
+
+outputs:
+  sha:
+    description: "The commit actually checked out."
+    value: ${{ steps.clone.outputs.sha }}
+
+runs:
+  using: composite
+  steps:
+    - id: clone
+      shell: bash
+      env:
+        # Cove 1.3.1 — the commit `v1.3.1` tags. The floor moved here on 2026-08-24 because 1.3.0
+        # cannot launch its own managed FFmpeg: ffprobe fails to load `libavdevice.so.63`, every
+        # scan reports invalid media rather than deferring it, and a user on 1.3.0 therefore has no
+        # library for this extension to match against. Must stay in step with
+        # extension.json's minCoveVersion; scripts/package.sh fails the build if the two disagree,
+        # so bump them together.
+        #
+        # Not `main`: that moves, so re-running the same tag later would compile against a
+        # different host and ship a different ZIP under the same version. By SHA rather than by
+        # `v1.3.1` for the same reason — a tag is a pointer someone can repoint, and `v1.3.1` is an
+        # annotated tag whose own object id is not the commit's.
+        COVE_PIN: 50c4da7b192712fb0f9f11868977d4dd9f9b7d15
+        REQUESTED_REF: ${{ inputs.ref }}
+        TARGET: ${{ inputs.path }}
+      run: |
+        set -euo pipefail
+        ref=${REQUESTED_REF:-$COVE_PIN}
+
+        # Blobless rather than --depth 1: the version check needs full history and tags, which a
+        # shallow clone has neither of, and `checkout` needs a real object graph to resolve a SHA.
+        git clone --filter=blob:none https://github.com/yourcove/cove.git "$TARGET"
+        git -C "$TARGET" checkout --detach "$ref"
+
+        sha=$(git -C "$TARGET" rev-parse HEAD)
+        echo "sha=$sha" >> "$GITHUB_OUTPUT"
+        echo "Cove at $(git -C "$TARGET" rev-parse --short HEAD) (requested: $ref)"

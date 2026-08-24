@@ -1,0 +1,58 @@
+# Dependency updates for the three ecosystems this repo actually has.
+#
+# It exists for the same reason the pinned action SHA below it does: this repo is about to take
+# outside PRs under `goiabos`, and a project that pins versions without ever moving them trades one
+# supply-chain risk for another — an unpatched dependency is as real as a hijacked tag. Pinning is
+# what makes an update deliberate; this is what makes it happen.
+#
+# Monthly rather than weekly, and grouped rather than one PR per package. Nothing here is on a
+# security-fix cadence — the extension is not published yet, `npm` is a build-time toolchain that
+# ships nothing, and `nuget` reaches only the test project. A pile of open PRs nobody reads is worse
+# than a slower cadence, and while GitHub Actions is stopped every one of them would sit
+# unverified anyway. Security updates are not on this schedule: Dependabot raises those immediately
+# and ignores `schedule` for them.
+version: 2
+
+updates:
+  # The actions themselves. This is the half that matters most, because it is what keeps a SHA pin
+  # from rotting into a version nobody has looked at since — see `release.yml` for why the release
+  # action is pinned by commit at all.
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: monthly
+    open-pull-requests-limit: 3
+    groups:
+      actions:
+        patterns: ["*"]
+
+  # Only the test project has PackageReferences. The extension itself references Cove by project,
+  # because Cove.Data is on no NuGet feed, so there is nothing for
+  # Dependabot to update in `src/`.
+  - package-ecosystem: nuget
+    directory: "/tests"
+    schedule:
+      interval: monthly
+    open-pull-requests-limit: 3
+    groups:
+      test-tooling:
+        patterns: ["*"]
+    ignore:
+      # Held at the version Cove's own `Cove.Data.csproj` pins, deliberately — the test project
+      # builds `CoveContext` against the host we compile against, and diverging from it buys nothing
+      # while making a failure ambiguous between our code and a version skew. These move when the
+      # Cove pin moves, in the same commit, not on a Dependabot schedule. The csproj says so at the
+      # pin itself.
+      - dependency-name: "Microsoft.EntityFrameworkCore*"
+      - dependency-name: "Microsoft.AspNetCore.TestHost"
+
+  # Build-time only: `ui/` is esbuild, TypeScript and vitest. None of it is in the shipped bundle,
+  # which is a single `main.js` with the host's React left external.
+  - package-ecosystem: npm
+    directory: "/src/Cove.TorrentMetadata/ui"
+    schedule:
+      interval: monthly
+    open-pull-requests-limit: 3
+    groups:
+      frontend-tooling:
+        patterns: ["*"]

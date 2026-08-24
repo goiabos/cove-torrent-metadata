@@ -1,0 +1,100 @@
+name: CI
+
+# Runs the suite on every push and PR. Before this existed the only workflow was release.yml, which
+# never invoked `dotnet test`, so a tag could cut and publish a release over a red suite and nothing
+# noticed — the tests ran only when someone typed the command by hand.
+#
+# Release tags are skipped here: release.yml runs the same tests itself before packaging, so letting
+# both fire on a tag would just duplicate the work.
+on:
+  push:
+    branches: ["**"]
+    tags-ignore: ["v*"]
+  pull_request:
+
+# Least privilege, stated rather than inherited. Without a `permissions:` block the job gets whatever
+# the repository default is, which for a repo created before the default changed is a read/write token
+# on every scope — handed to a third-party action on a pull request from a fork, once this repo takes
+# outside PRs under `goiabos`.
+#
+# Read is all of it: this workflow clones two repos, builds, tests and packages, and writes nothing
+# back. `release.yml` is where a write token is actually needed, and it declares it on the one job
+# that needs it rather than at the top of the file.
+permissions:
+  contents: read
+
+# Superseded runs on the same branch are pointless once a newer commit exists.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      # Checked out into a subdirectory so Cove can sit beside it: Directory.Build.props probes for
+      # a sibling named `cove`, and the extension does not compile without it.
+      - uses: actions/checkout@v6
+        with:
+          path: cove-torrent-metadata
+
+      # No torrent is ever committed here — they are the tracker's data, the filenames and tag lists are the
+      # most identifying artefact in the project, and git history cannot be un-published. .gitignore
+      # states the rule but `git add -f` walks through it, so the rule is enforced rather than
+      # documented. No test may depend on a specific torrent either.
+      - name: No torrents in the repo
+        working-directory: cove-torrent-metadata
+        run: |
+          if git ls-files -- '*.torrent' | grep .; then
+            echo "::error::A .torrent file is tracked in this repository. Torrents are never committed here."
+            exit 1
+          fi
+          echo "clean — no tracked torrents"
+
+      - uses: ./cove-torrent-metadata/.github/actions/cove-checkout
+
+      - uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: "10.0.x"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: cove-torrent-metadata/src/Cove.TorrentMetadata/ui/package-lock.json
+
+      # The compiler-warning gate lives in `Directory.Build.props` as
+      # `TreatWarningsAsErrors`, not on this command line, and that is the whole fix.
+      # `-warnaserror` here applied to every project MSBuild builds — including Cove's, since
+      # Cove.Data is on no NuGet feed and so is a ProjectReference into the checkout. Cove.Data does
+      # not compile warning-free (EF1002 in EmbeddingService, on every pin), so this step failed on
+      # someone else's warning for 29 commits while printing `Passed: 610` a minute earlier. Scoped
+      # to our tree the gate also works in the local loop, which is where it should have been failing.
+      #
+      # The NU19xx exemption moved into the props with it, and had to: MSBuild rejects
+      # `-warnnotaserror` unless `-warnaserror` is also given and left empty, so the two switches
+      # cannot be separated. `WarningsNotAsErrors` carries it there instead — see the props for why
+      # that works now and did not when the flag was global.
+      - name: Tests
+        working-directory: cove-torrent-metadata
+        run: dotnet test tests/Cove.TorrentMetadata.Tests.csproj --logger "console;verbosity=normal"
+
+      # `npm run build` is esbuild alone, which strips types without checking them — a broken
+      # frontend contract builds clean and ships. `tsc --noEmit` is the only type gate there is, and
+      # it is wired into neither the build nor the package script, so it runs here.
+      #
+      # The unit tests cover `src/Cove.TorrentMetadata/ui/src/review.ts` — what the browser decides
+      # to send, which the type gate cannot see. Without them a PR touching the frontend could change
+      # what an apply writes to
+      # someone's library and pass CI.
+      - name: Frontend typecheck and tests
+        working-directory: cove-torrent-metadata/src/Cove.TorrentMetadata/ui
+        run: |
+          npm ci
+          npm run typecheck
+          npm test
+
+      # Not a release build, just proof the packaging rules still hold: no host-provided assembly,
+      # no symbols, nothing identifying, and the checkout matching minCoveVersion.
+      - name: Packaging checks
+        working-directory: cove-torrent-metadata
+        run: bash scripts/package.sh --verify

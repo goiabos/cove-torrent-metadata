@@ -1,0 +1,66 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <IsPackable>false</IsPackable>
+    <RootNamespace>Cove.TorrentMetadata</RootNamespace>
+  </PropertyGroup>
+
+  <!--
+    This is a standalone extension: it is loaded from the extensions directory at runtime and is never
+    referenced by the host. Nothing in Cove's own src/ may reference it.
+
+    It lives at src/Cove.TorrentMetadata/ with tests/ beside it at the repo root, which is the layout
+    the official extension template uses. It used to sit at the root with tests/ nested inside its own
+    directory, which forced a `<Compile Remove="tests/**" />` pair to stop the SDK's default glob
+    compiling the test sources into the shipped extension — an xunit reference and test code in the
+    release ZIP, held off by two lines. Nothing needs them now.
+
+    Cove.Sdk brings in buildTransitive/Cove.Sdk.targets, which turns on plugin output and strips the
+    host-provided assemblies so they are not shipped. Cove.Data is added to that list here (the targets
+    document this override) because the extension compiles against CoveContext but must not carry a copy:
+    the host already owns it, and a duplicate would split type identity across load contexts. The runtime
+    ignores a bundled copy regardless — ExtensionLoadContext always prefers the host's — so this only
+    keeps the package slim and avoids the packaging warning.
+  -->
+  <PropertyGroup>
+    <!--
+      The SDK's default list, plus Cove.Data and the auth/crypto closure it drags in transitively. Every
+      added name was verified present in the host's own output, so ExtensionLoadContext resolves them from
+      the host at runtime and any bundled copy is ignored regardless — shipping them is dead weight and a
+      packaging warning, nothing more.
+    -->
+    <CoveHostProvidedAssemblies>;Cove.Core;Cove.Plugins;Cove.Sdk;Cove.Data;Microsoft.EntityFrameworkCore;Microsoft.EntityFrameworkCore.Abstractions;Microsoft.EntityFrameworkCore.Relational;Npgsql;Npgsql.EntityFrameworkCore.PostgreSQL;Pgvector;Pgvector.EntityFrameworkCore;MediatR.Contracts;BCrypt-Net-Next;Konscious.Security.Cryptography.Argon2;Konscious.Security.Cryptography.Blake2;Microsoft.Bcl.Cryptography;Microsoft.IdentityModel.Abstractions;Microsoft.IdentityModel.JsonWebTokens;Microsoft.IdentityModel.Logging;Microsoft.IdentityModel.Tokens;System.IdentityModel.Tokens.Jwt;</CoveHostProvidedAssemblies>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="$(CoveSrc)Cove.Sdk/Cove.Sdk.csproj" />
+    <ProjectReference Include="$(CoveSrc)Cove.Data/Cove.Data.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="extension.json" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <!--
+    The frontend is bundled by esbuild (ui/build.mjs) into dist-ui/, then copied to ui/main.js in the
+    output where extension.json's jsBundle path expects it. The npm build is skipped when node_modules
+    is missing so a plain `dotnet build` still succeeds on a machine without Node; the previously built
+    bundle is then reused, and CI runs the npm build explicitly.
+  -->
+  <Target Name="BuildExtensionUi" BeforeTargets="AssignTargetPaths"
+          Condition="'$(SkipExtensionUiBuild)' != 'true' and Exists('$(MSBuildProjectDirectory)/ui/node_modules')">
+    <Exec Command="npm run build" WorkingDirectory="$(MSBuildProjectDirectory)/ui" />
+  </Target>
+
+  <ItemGroup>
+    <None Include="dist-ui/main.js" Link="ui/main.js" CopyToOutputDirectory="PreserveNewest"
+          Condition="Exists('$(MSBuildProjectDirectory)/dist-ui/main.js')" />
+  </ItemGroup>
+
+  <Import Project="$(CoveSrc)Cove.Sdk/buildTransitive/Cove.Sdk.targets" Condition="'$(CoveSrc)' != ''" />
+
+</Project>

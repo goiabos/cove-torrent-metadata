@@ -1,0 +1,14 @@
+<Project>
+
+  <!--
+    Present for the same reason as Directory.Build.props: .targets is searched separately, so
+    without this file MSBuild would still find and apply Cove's. Also deliberately does not import
+    the parent.
+  -->
+
+  <Target Name="EnsureCoveSourcesResolved" BeforeTargets="Build;Restore">
+    <Error Condition="'$(CoveSrc)' == ''"
+           Text="No Cove checkout found. This extension compiles against Cove.Sdk and Cove.Data, and Cove.Data is on no NuGet feed, so a checkout must be on disk — either as a sibling directory named 'cove' next to this repo, or with this repo inside a Cove checkout one level down. Override by passing -p:CoveSrc=&lt;path-to&gt;/cove/src/ (trailing slash required)." />
+  </Target>
+
+</Project>
