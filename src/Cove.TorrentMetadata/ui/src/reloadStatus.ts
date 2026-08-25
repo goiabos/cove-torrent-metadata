@@ -23,7 +23,10 @@ export interface ReloadReport {
   torrents: number;
   files: number;
   folder: string | null;
-  /** Every folder read, in order, so the page can name one that is missing or empty. */
+  /**
+   * Every folder read, in order, so the page can name one that is missing or empty. `writable` marks
+   * the extension's own folder — exactly one entry, and never one the operator configured.
+   */
   folders: Array<{ path: string; exists: boolean; torrents: number; writable: boolean }>;
   /** True when the index cap was reached and later folders went unread. */
   truncated: boolean;
@@ -88,7 +91,16 @@ export function reloadStatus(report: ReloadReport): string {
   // A folder that is not there is reported rather than thrown — a source can live on a drive that is
   // not mounted — so this is the only place it surfaces. Silence would read as a folder holding no
   // torrents, which is a different problem with a different fix.
-  const missing = report.folders.filter((folder) => !folder.exists).map((folder) => folder.path);
+  //
+  // **Ours is not one of them.** The extension's own folder is created by the first upload, so on an
+  // install where nothing has been dropped yet it is legitimately absent — and naming it here read as
+  // a misconfiguration the user had to go and fix, in a sentence otherwise reserved for a source they
+  // chose and we could not open. Where its absence *does* matter is the empty state, which has to send
+  // someone to a folder to copy files into: `whereToPutTorrents` says "create it first" there, and
+  // that is the one place it is worth saying.
+  const missing = report.folders
+    .filter((folder) => !folder.exists && !folder.writable)
+    .map((folder) => folder.path);
 
   return [
     `Read ${read.length} folder(s): ${report.torrents} torrents, ${report.files} video files.`,

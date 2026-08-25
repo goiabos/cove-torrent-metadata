@@ -954,8 +954,8 @@ describe("describeRowFilter", () => {
   it("names its unit, because this page counts three different things", () => {
     // Rows, videos and torrent video files all appear on this page, and reporting one as another is
     // how a count stops meaning anything.
-    expect(describeRowFilter(51, 715)).toBe("51 of 715 rows shown");
-    expect(describeRowFilter(4, 1122)).toBe("4 of 1,122 rows shown");
+    expect(describeRowFilter(51, 715)).toBe("51 of 715 rows match");
+    expect(describeRowFilter(4, 1122)).toBe("4 of 1,122 rows match");
   });
 });
 
@@ -1221,8 +1221,8 @@ describe("sweepRows", () => {
   });
 
   it("names its own scope, the way the tag sweep does", () => {
-    expect(describeRowSweep(37, false)).toBe("Select the 37 rows shown");
-    expect(describeRowSweep(37, true)).toBe("Clear the 37 rows shown");
+    expect(describeRowSweep(37, false)).toBe("Select all 37 matched rows");
+    expect(describeRowSweep(37, true)).toBe("Clear all 37 matched rows");
   });
 });
 

@@ -566,9 +566,19 @@ export function sweepRows(
     : new Set([...current].filter((key) => !keys.has(key)));
 }
 
-/** What the header checkbox would do, named so its scope is legible without reading the code. */
-export function describeRowSweep(shown: number, checked: boolean): string {
-  return checked ? `Clear the ${shown} rows shown` : `Select the ${shown} rows shown`;
+/**
+ * What the header checkbox would do, named so its scope is legible without reading the code.
+ *
+ * It used to say "the N rows shown", and that stopped being true when the table gained pages: the
+ * sweep reaches the whole filtered list, of which a page is one screenful. Naming the count without
+ * claiming it is what you can see is the honest version of the same sentence — and the count is the
+ * part that matters, because it is the number a bulk apply would then be built from. Narrowing the
+ * sweep to the page instead was the alternative and is worse: with nothing ticked, `planApply` already
+ * covers every matched row the filter shows, so a page-scoped sweep would make ticking *fewer* rows
+ * than the bare button.
+ */
+export function describeRowSweep(matched: number, checked: boolean): string {
+  return checked ? `Clear all ${matched} matched rows` : `Select all ${matched} matched rows`;
 }
 
 /**
@@ -712,10 +722,14 @@ export function packFocusSummary(rows: readonly BatchRow[], pack: string): strin
  * It names its unit. Almost every figure on this page counts torrent video files, one counts videos,
  * and reporting one as the other is how a count stops meaning anything — so this says *rows*
  * out loud rather than joining a row of bare numbers.
+ *
+ * It says "match" rather than "shown", because since the table gained pages those are two different
+ * numbers and the pager owns the other one: this is how many rows came through the filter, and the
+ * range beside it is how many of those are drawn.
  */
 export function describeRowFilter(shown: number, total: number): string | null {
   if (shown === total) return null;
-  return `${shown.toLocaleString("en-US")} of ${total.toLocaleString("en-US")} rows shown`;
+  return `${shown.toLocaleString("en-US")} of ${total.toLocaleString("en-US")} rows match`;
 }
 
 /** The toggles a bulk apply would run under. `includePacks` is spent before this, on `eligibleRows`. */

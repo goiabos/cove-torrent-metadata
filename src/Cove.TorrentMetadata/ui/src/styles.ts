@@ -327,6 +327,9 @@ a.tm-btn { display: inline-flex; align-items: center; text-decoration: none; }
   font-size: .84rem;
 }
 .tm-check { display: flex; align-items: center; gap: 6px; cursor: pointer; }
+/* Narrow, because its widest option is four characters. Beside a label rather than carrying one, so
+   it sits in the strip the same way the checkboxes do. */
+.tm-per-page { padding: 3px 6px; }
 .tm-notice {
   margin: 10px 0; padding: 9px 12px; border-radius: 6px; font-size: .84rem;
   background: var(--color-surface, #1a1c23); border: 1px solid var(--color-border, #2a2d38);

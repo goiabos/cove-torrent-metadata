@@ -1,6 +1,7 @@
 import React from "@cove/runtime/react";
 import { batchApi, matchApi, writeFolderApi, type Settings } from "./api";
 import { describeFolderAdd, describeHostAdd } from "./listEdit";
+import { reloadStatus } from "./reloadStatus";
 import {
   FOLDER_PAGE,
   afterRemoval,
@@ -394,6 +395,9 @@ export function TorrentMetadataSettings() {
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // Separate from `busy`, which every setting shares: this is the one operation on the panel long
+  // enough that the button has to say it is running, and the label is what says it.
+  const [rescanning, setRescanning] = useState(false);
 
   const receive = (settings: Settings) => {
     setStyle(settings.tagNameStyle);
@@ -449,6 +453,31 @@ export function TorrentMetadataSettings() {
       // what is still stored when a write fails.
       setError((failure as Error).message);
     } finally {
+      setBusy(false);
+    }
+  };
+
+  /**
+   * Re-reads every configured folder from here, rather than sending the user to the other page.
+   *
+   * This panel is where folders are added and removed, and every message it writes about one ends in
+   * "rescan" — so the button belongs beside them. What it reports is `reloadStatus`'s sentence and not
+   * a second wording of it: missing folders, the index cap and the per-reason skip counts each surface
+   * nowhere else, and a panel that summarised the reload in its own words would be the second place
+   * one of them could go missing.
+   */
+  const rescan = async () => {
+    if (rescanning || busy) return;
+    setRescanning(true);
+    setBusy(true);
+    setError(null);
+    setNotice(null);
+    try {
+      setNotice(reloadStatus(await batchApi.reload()));
+    } catch (failure) {
+      setError((failure as Error).message);
+    } finally {
+      setRescanning(false);
       setBusy(false);
     }
   };
@@ -516,8 +545,8 @@ export function TorrentMetadataSettings() {
       />
       <p className="tm-hint">
         Read only — nothing is ever written into them, and removing one leaves its files alone. Must be
-        absolute paths on the machine running Cove. Changes take effect on the next{" "}
-        <strong>Rescan folder</strong>, not immediately.
+        absolute paths on the machine running Cove. Changes take effect on the next rescan, not
+        immediately.
         {writeFolder ? (
           <>
             {" "}
@@ -530,6 +559,22 @@ export function TorrentMetadataSettings() {
             Uninstalling the extension does not remove them, and this is the only screen that can.
           </>
         ) : null}
+      </p>
+
+      {/* Here as well as on the batch page, because this is where a folder is added and every message
+          about one ends in "rescan" — sending the user to another page to finish what they started
+          here is the gap the wording used to leave. */}
+      <p>
+        <button type="button" className="tm-btn" disabled={busy} aria-busy={rescanning} onClick={() => void rescan()}>
+          {rescanning ? (
+            <>
+              <span className="tm-spinner" aria-hidden="true" />
+              Rescanning…
+            </>
+          ) : (
+            "Rescan folders now"
+          )}
+        </button>
       </p>
 
       <FolderList

@@ -1,5 +1,5 @@
 import React from "@cove/runtime/react";
-import { ConfirmDialog } from "@cove/runtime/components";
+import { ConfirmDialog, DetailListPagination } from "@cove/runtime/components";
 import { batchApi, matchApi, type BatchOverview, type BatchRow, type TorrentMatchProposal } from "./api";
 import { describeBulkApply, emptyTotals, foldApplyResult, shouldContinue } from "./bulkApply";
 import { CoverImg } from "./CoverImg";
@@ -38,6 +38,15 @@ import { folderChangeNotice, type FolderStateReport } from "./folderState";
 import { emptyStateMessage } from "./emptyState";
 import { overviewSummary } from "./overviewSummary";
 import { reloadStatus } from "./reloadStatus";
+import {
+  ALL_ROWS,
+  DEFAULT_PER_PAGE,
+  PER_PAGE_OPTIONS,
+  describePageRange,
+  pageOf,
+  perPageLabel,
+  takePage,
+} from "./paging";
 import { ensureStyles } from "./styles";
 
 const { useCallback, useEffect, useMemo, useRef, useState } = React;
@@ -69,8 +78,13 @@ export function TorrentBatchPage() {
    * re-enabled Apply mid-run — two overlapping chunked runs — and the upload's own `load()` replaced
    * `rows` under `plan` while the run was still slicing it. Naming the operation makes the
    * collision unrepresentable rather than merely guarded: there is no value here that means "both".
+   *
+   * A rescan is one of them, and had to become one: it walks every configured folder — 3,199 torrents
+   * over 138,153 video files on the measured library — and until it finished, nothing on the page said
+   * anything at all, so the button read as broken and got pressed again. It is also the third writer of
+   * `rows`, for the same reason the other two are here.
    */
-  const [busy, setBusy] = useState<"upload" | "apply" | null>(null);
+  const [busy, setBusy] = useState<"upload" | "apply" | "rescan" | null>(null);
   /**
    * The same fact, where an entry guard can actually read it.
    *
@@ -141,28 +155,22 @@ export function TorrentBatchPage() {
   }, []);
 
   /**
-   * Loads the overview. `rescan` re-reads the watched folder first, which is what picks up torrents
-   * copied in by hand — an upload reindexes itself, but a plain file copy has nothing to trigger it.
+   * Loads the overview.
+   *
+   * Re-reading the folders is `rescan`'s, not a flag here. It used to be one, and the two failure
+   * paths are not the same: this one leaves the page with an error and no rows, while a reload that
+   * throws has to take its own "rescanning…" line down with it or the page sits claiming to be busy
+   * with something that already gave up.
    */
-  const load = useCallback(async (rescan = false) => {
+  const load = useCallback(async () => {
     setError(null);
     try {
-      if (rescan) {
-        // What the line says is `reloadStatus`'s decision, not this component's: missing folders, the
-        // index cap and the per-reason skip counts are each the only place their state surfaces at all
-        //, and a branch none of them can be tested through is where one gets dropped.
-        setStatus(reloadStatus(await batchApi.reload()));
-        // The rescan just reset what the server compares against, so the notice this page may have
-        // been showing is now answered. Re-asked rather than assumed cleared: a folder that went
-        // missing during the walk still has something to say.
-        void checkFolders();
-      }
       setOverview(await batchApi.list());
     } catch (caught) {
       setError((caught as Error).message);
       setOverview({ rows: [], unmatched: 0, videosMatchableByName: 0, indexedFiles: 0, torrents: 0 });
     }
-  }, [checkFolders]);
+  }, []);
 
   useEffect(() => {
     void load();
@@ -197,6 +205,30 @@ export function TorrentBatchPage() {
   const visible = useMemo(() => scopeRows(onPage, scope), [onPage, scope]);
   const rowFilter = describeRowFilter(visible.length, onPage.length);
 
+  /**
+   * How much of `visible` is in the DOM at once.
+   *
+   * A *view*, and nothing else reads it. Every rule about scope goes on reading `visible`: the header
+   * sweep, the apply plan and the review walk all cover the whole filtered list, because a filter and
+   * a page turn are different kinds of thing and making them mean the same would silently shrink what
+   * *Apply* does to whatever screenful you happened to be on (`paging.ts` has the argument).
+   *
+   * Held in component state and not persisted. The size is a reading preference for one sitting, and
+   * the alternatives — a server setting, or browser storage — both put a second place to look when the
+   * table draws a number of rows nobody asked for.
+   */
+  const [perPage, setPerPage] = useState(DEFAULT_PER_PAGE);
+  const [page, setPage] = useState(1);
+  const view = useMemo(() => takePage(visible, page, perPage), [visible, page, perPage]);
+  const pageRange = describePageRange(view);
+
+  // Back to the first page whenever the list under it becomes a different list. `takePage` already
+  // clamps, so this is not what keeps the page in range — it is what stops a filter typed on page 9
+  // answering with the tail of its own results.
+  useEffect(() => {
+    setPage(1);
+  }, [scope, hideApplied]);
+
   const counts = useMemo(() => {
     const all = rows ?? [];
     return {
@@ -218,10 +250,10 @@ export function TorrentBatchPage() {
   /**
    * Claims the page for one operation, or refuses because another already holds it.
    *
-   * Both long operations go through this. Guarding only one of them would leave the collision
+   * All three long operations go through this. Guarding only one of them would leave the collision
    * reachable from the other side, which is how the defect was live in both directions at once.
    */
-  const claim = (operation: "upload" | "apply") => {
+  const claim = (operation: "upload" | "apply" | "rescan") => {
     if (running.current) return false;
     running.current = true;
     setBusy(operation);
@@ -231,6 +263,43 @@ export function TorrentBatchPage() {
   const release = () => {
     running.current = false;
     setBusy(null);
+  };
+
+  /**
+   * Re-reads every configured folder, and says so while it is happening.
+   *
+   * The wait is the whole reason this is a function rather than `onClick={() => void load(true)}`. A
+   * reload walks each folder and parses every `.torrent` in it; over a real collection that is seconds
+   * of a page that looked exactly as it did before the click, and then the whole table changing at
+   * once. The button names what it is doing and the status line does too — set before the request
+   * rather than after it, since "after" is the part that was already fine.
+   *
+   * It claims the page like the other two because it is the third writer of `rows`: an apply slicing
+   * `plan` while a rescan replaces the rows underneath it is that same collision reached another way.
+   */
+  const rescan = async () => {
+    if (!claim("rescan")) return;
+    setStatus("Rescanning the torrent folders…");
+    setError(null);
+    try {
+      // What the finished line says is `reloadStatus`'s decision, not this component's: missing
+      // folders, the index cap and the per-reason skip counts are each the only place their state
+      // surfaces at all, and a branch none of them can be tested through is where one
+      // gets dropped.
+      setStatus(reloadStatus(await batchApi.reload()));
+      // The rescan just reset what the server compares against, so the notice this page may have been
+      // showing is now answered. Re-asked rather than assumed cleared: a folder that went missing
+      // during the walk still has something to say.
+      void checkFolders();
+      await load();
+    } catch (caught) {
+      // The placeholder goes with it. Leaving it up would leave the page saying it is still reading
+      // folders beside an error explaining that it is not.
+      setStatus(null);
+      setError((caught as Error).message);
+    } finally {
+      release();
+    }
   };
 
   const upload = async (files: FileList | File[]) => {
@@ -326,6 +395,21 @@ export function TorrentBatchPage() {
     const row = queue === null ? null : currentRow(queue);
     return row === null ? null : rowKey(row);
   }, [queue]);
+
+  /**
+   * The page follows the walk, because the walk is over `visible` and the page is not.
+   *
+   * Stepping past the last row on screen is ordinary — the queue is the whole filtered list — and
+   * without this the list beside the review would simply stop marking anything, with the pane showing
+   * a row the list next to it does not hold. Arrow keys reach the same code, which is the case that
+   * makes it worth an effect rather than a nudge inside `openRow`.
+   */
+  useEffect(() => {
+    if (reviewing === null) return;
+    const index = visible.findIndex((row) => rowKey(row) === reviewing);
+    if (index < 0) return;
+    setPage(pageOf(index, perPage));
+  }, [reviewing, visible, perPage]);
 
   /**
    * Applies in chunks so the user sees real progress.
@@ -643,6 +727,27 @@ export function TorrentBatchPage() {
         </label>
         {rowFilter ? <span className="tm-hint">{rowFilter}</span> : null}
 
+        {/* The sizes are Cove's own (`LIST_PER_PAGE_OPTIONS`), including its spelling of "show
+            everything", so the control reads as part of the host. What it changes is how many rows are
+            drawn and nothing else — the sweep, the plan and the walk all still cover the filter. */}
+        <label className="tm-check">
+          Rows per page
+          <select
+            className="tm-select tm-per-page"
+            value={String(perPage)}
+            title="How many rows to draw at once"
+            onChange={(event) => {
+              setPerPage(Number(event.target.value));
+              setPage(1);
+            }}
+          >
+            {[...PER_PAGE_OPTIONS, ALL_ROWS].map((size) => (
+              <option key={size} value={size}>{perPageLabel(size)}</option>
+            ))}
+          </select>
+        </label>
+        {pageRange ? <span className="tm-hint">{pageRange}</span> : null}
+
         <span className="tm-controls-sep" aria-hidden="true" />
 
         <label className="tm-check">
@@ -657,14 +762,25 @@ export function TorrentBatchPage() {
           <input type="checkbox" checked={importCovers} onChange={() => setImportCovers((value) => !value)} />
           Import covers <span className="tm-hint">(replaces existing artwork)</span>
         </label>
+        {/* Says which of the two it is doing. A button that looks identical for the several seconds a
+            folder walk takes is a button that gets pressed again — `aria-busy` and the spinner are for
+            the same reason the label changes, one per way of reading the page. */}
         <button
           type="button"
           className="tm-btn"
           disabled={busy !== null}
-          title="Re-read the torrent folder and refresh"
-          onClick={() => void load(true)}
+          aria-busy={busy === "rescan"}
+          title="Re-read the torrent folders and refresh"
+          onClick={() => void rescan()}
         >
-          Rescan folder
+          {busy === "rescan" ? (
+            <>
+              <span className="tm-spinner" aria-hidden="true" />
+              Rescanning…
+            </>
+          ) : (
+            "Rescan folder"
+          )}
         </button>
       </div>
 
@@ -711,7 +827,7 @@ export function TorrentBatchPage() {
       {proposal ? (
         <div className="tm-split">
           <div className="tm-list">
-            {visible.map((row) => {
+            {view.rows.map((row) => {
               const current = reviewing !== null && reviewing === rowKey(row);
               return (
                 <button
@@ -753,6 +869,13 @@ export function TorrentBatchPage() {
                 </button>
               );
             })}
+            <DetailListPagination
+              filter={{ page: view.page, perPage }}
+              onFilterChange={(next) => setPage(next.page ?? 1)}
+              totalCount={visible.length}
+              allowInfinitePageSize
+              ariaLabel="Pagination for the review list"
+            />
           </div>
 
           <ReviewPane
@@ -813,7 +936,7 @@ export function TorrentBatchPage() {
             </tr>
           </thead>
           <tbody>
-            {visible.map((row) => (
+            {view.rows.map((row) => (
               <tr
                 key={rowKey(row)}
                 className="is-clickable"
@@ -903,6 +1026,20 @@ export function TorrentBatchPage() {
           </tbody>
         </table>
       )}
+
+      {/* Below the table rather than above it, because it is where you arrive having read the page.
+          `totalCount` is the whole filtered list — the pager's job is to say how much of it there is,
+          which is exactly the fact a single screenful of rows hides. It draws nothing at one page or
+          at "All". */}
+      {!inReview ? (
+        <DetailListPagination
+          filter={{ page: view.page, perPage }}
+          onFilterChange={(next) => setPage(next.page ?? 1)}
+          totalCount={visible.length}
+          allowInfinitePageSize
+          ariaLabel="Pagination for the torrent rows"
+        />
+      ) : null}
 
       {rows !== null && visible.length === 0 ? (
         <p className="tm-empty">

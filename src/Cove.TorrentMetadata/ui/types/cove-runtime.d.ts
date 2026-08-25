@@ -35,4 +35,29 @@ declare module "@cove/runtime/components" {
     onConfirm: () => void | Promise<void>;
     onCancel: () => void;
   }): ReactElement | null;
+
+  /**
+   * The host's own list filter. Only the two paging members are declared, because they are the only
+   * ones `DetailListPagination` reads and this extension holds no `FindFilter` of its own — the batch
+   * page filters in the browser over rows it already has.
+   */
+  export interface FindFilter {
+    page?: number;
+    /** `0` together with `allowInfinitePageSize` means "show everything". */
+    perPage?: number;
+  }
+
+  /**
+   * Cove's list pagination, so the batch page turns pages with the host's own control rather than a
+   * second one that looks nearly like it. Renders nothing at one page or at an infinite page size, and
+   * repairs an out-of-range page through `onFilterChange`.
+   */
+  export function DetailListPagination(props: {
+    filter: FindFilter;
+    onFilterChange: (filter: FindFilter) => void;
+    totalCount: number;
+    allowInfinitePageSize?: boolean;
+    className?: string;
+    ariaLabel?: string;
+  }): ReactElement | null;
 }

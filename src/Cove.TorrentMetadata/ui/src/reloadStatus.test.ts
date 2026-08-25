@@ -79,6 +79,38 @@ describe("reloadStatus", () => {
     expect(status).toBe("Read 1 folder(s): 3 torrents, 12 video files. Not found: /mnt/archive.");
   });
 
+  it("does not report the extension's own folder as missing", () => {
+    // It is created by the first upload, so an install where nothing has been dropped yet has no such
+    // folder — and naming it under "Not found" read as a misconfiguration to go and fix. That sentence
+    // is for a source the operator chose and we could not open. Where the absence matters is the empty
+    // state, and `whereToPutTorrents` says it there.
+    const status = reloadStatus(
+      report({
+        torrents: 3,
+        folders: [
+          { path: "/data/torrent-metadata", exists: false, torrents: 0, writable: true },
+          { path: "/srv/torrents", exists: true, torrents: 3, writable: false },
+        ],
+      }),
+    );
+
+    expect(status).toBe("Read 1 folder(s): 3 torrents, 12 video files.");
+  });
+
+  it("still names a missing source when ours is missing too", () => {
+    // The two are separate claims and suppressing ours must not suppress theirs.
+    const status = reloadStatus(
+      report({
+        folders: [
+          { path: "/data/torrent-metadata", exists: false, torrents: 0, writable: true },
+          { path: "/mnt/archive", exists: false, torrents: 0, writable: false },
+        ],
+      }),
+    );
+
+    expect(status).toBe("Read 0 folder(s): 3 torrents, 12 video files. Not found: /mnt/archive.");
+  });
+
   it("carries the missing folders, the skips and the cap together", () => {
     // All three at once, because each is the only place its state surfaces and a line that drops one
     // when another is present is the failure they were separated to avoid.
