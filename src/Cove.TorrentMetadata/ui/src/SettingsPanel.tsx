@@ -455,6 +455,22 @@ export function TorrentMetadataSettings() {
 
   return (
     <div className="tm-panel">
+      {/* The first question after an install is "where did the page go", and the answer is a host
+          setting this panel cannot change: menu entries are opt-in, so Torrent Matches ships hidden
+          until it is toggled on. Said here because this panel is where a fresh install lands. */}
+      <div className="tm-panel-field">
+        <span className="tm-field-label">The Torrent Matches page</span>
+      </div>
+      <p className="tm-hint">
+        Cove menu entries are opt-in, so the batch page starts <strong>hidden</strong> after
+        install. Toggle <strong>Torrent Matches</strong> on under Interface → Navigation to put it
+        in the main menu; it is always reachable at <code className="tm-code">/torrent-metadata</code> either
+        way.
+      </p>
+      <p>
+        <a className="tm-btn" href="/settings/my/interface">Open Interface settings</a>
+      </p>
+
       <label className="tm-panel-field">
         <span className="tm-field-label">New tags are named</span>
         <select

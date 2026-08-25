@@ -14,7 +14,8 @@ After installing, the extension surfaces in three places:
 - **The video page** — **Operations → Match from torrent** on any video opens a drop zone, and a
   dropped `.torrent` opens the review dialog pinned to that exact file.
 - **Settings → Extensions → Torrent Metadata** — torrent folders, cover hosts, and how new tags
-  are named.
+  are named. The batch page's gear icon links straight to it, and the panel itself carries the
+  menu-visibility pointer above.
 
 ## What it reads
 

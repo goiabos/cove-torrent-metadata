@@ -162,6 +162,9 @@ const css = `
   background: var(--color-accent, #4f8ff7); border-color: var(--color-accent, #4f8ff7); color: #fff;
 }
 .tm-btn:disabled { opacity: .5; cursor: default; }
+/* Anchors wearing the button class — the gear and the Interface-settings pointer. */
+a.tm-btn { display: inline-flex; align-items: center; text-decoration: none; }
+.tm-btn.is-icon { padding: 7px 9px; }
 .tm-select {
   font: inherit; font-size: .8rem; padding: 4px 8px; border-radius: 6px;
   background: var(--color-input, rgba(0,0,0,.25)); color: var(--color-foreground, #e8eaf0);

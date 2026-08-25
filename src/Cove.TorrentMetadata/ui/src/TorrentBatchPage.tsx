@@ -534,6 +534,34 @@ export function TorrentBatchPage() {
           </p>
         </div>
         <div className="tm-page-actions">
+          {/* The page that does the work links the page that configures it — folders, naming and
+              cover hosts otherwise have no path from here at all.
+
+              Not a plain href, because the settings route cannot be cold-loaded: the host's SPA
+              fallback is MapFallbackToFile, whose `nonfile` route constraint refuses any last
+              segment containing a dot — and every reverse-domain extension id contains dots, so a
+              full page load of this URL is a bare 404. The click handler navigates inside the
+              running SPA instead — the host router listens to popstate — and the href stays a
+              real page so middle-click and copy-link degrade to the settings root rather than to
+              a 404. */}
+          <a
+            className="tm-btn is-icon"
+            href="/settings"
+            title="Torrent Metadata settings"
+            aria-label="Torrent Metadata settings"
+            onClick={(event) => {
+              if (event.defaultPrevented || event.button !== 0) return;
+              if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+              event.preventDefault();
+              history.pushState(null, "", "/settings/extensions/io.github.goiabos.torrent-metadata");
+              dispatchEvent(new PopStateEvent("popstate"));
+            }}
+          >
+            <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <circle cx="12" cy="12" r="3" />
+              <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
+            </svg>
+          </a>
           <button type="button" className="tm-btn" disabled={busy !== null} onClick={() => fileInput.current?.click()}>
             Add torrents…
           </button>

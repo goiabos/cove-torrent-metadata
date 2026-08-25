@@ -9,21 +9,16 @@ describes your videos better than anything you would type by hand. This extensio
 it to your library by exact file size, and puts every change in front of you before anything is
 written.
 
-[Releases](https://github.com/goiabos/cove-torrent-metadata/releases) ·
-[Cove](https://github.com/yourcove/cove) ·
-[Issues](https://github.com/goiabos/cove-torrent-metadata/issues) ·
-[Contributing](CONTRIBUTING.md)
-
-![License](https://img.shields.io/github/license/goiabos/cove-torrent-metadata)
-![Latest release](https://img.shields.io/github/v/release/goiabos/cove-torrent-metadata)
-![Cove 1.3.1+](https://img.shields.io/badge/Cove-1.3.1%2B-blue)
+[![License](https://img.shields.io/github/license/goiabos/cove-torrent-metadata)](LICENSE)
+[![Latest release](https://img.shields.io/github/v/release/goiabos/cove-torrent-metadata)](https://github.com/goiabos/cove-torrent-metadata/releases/latest)
+[![Cove 1.3.1+](https://img.shields.io/badge/Cove-1.3.1%2B-blue)](https://github.com/yourcove/cove)
 
 ![The Torrent Matches page: every torrent against your library, and what each would add](docs/screenshots/batch-overview.png)
 
 > This is a community project. It is not affiliated with, endorsed by, or supported by the Cove
 > project. All titles, names and tags shown in the screenshots are invented.
 
-## What you can do
+## Features
 
 <table>
 <tr>
@@ -69,13 +64,15 @@ leap of faith.
 </td>
 </tr>
 <tr>
-<td><img src="docs/screenshots/cover-allowlist.png" alt="The cover host allowlist in the extension's settings"></td>
+<td><img src="docs/screenshots/extension-settings.png" alt="The extension's settings page: menu visibility, tag naming, torrent folders, cover hosts"></td>
 <td>
 
-**Cover art, only from hosts you name.** A cover URL arrives inside an untrusted `.torrent`, so
-the allowlist ships empty and nothing is fetched until you add your tracker's image hosts. Covers
-are cached, rate-limited and fetched with an honest User-Agent — your server stays a good citizen
-of whatever host you point it at.
+**One settings page holds every knob** — and the batch page's gear icon takes you straight to it.
+Map read-only folders of torrents, pick how new tags are named, manage what was dropped onto the
+extension's own pages, and allowlist the hosts covers may come from: a cover URL arrives inside an
+untrusted `.torrent`, so the list ships empty and nothing is fetched until you name your tracker's
+image hosts — then it is cached, rate-limited and sent with an honest User-Agent. The page also
+tells you how to put *Torrent Matches* into Cove's menu.
 
 </td>
 </tr>
@@ -93,7 +90,8 @@ of whatever host you point it at.
   the main menu. Cove's menu entries are opt-in, so a freshly installed extension page starts
   hidden — and while you are there, you can hide content types you don't use.
 - On every **video page**, under **Operations → Match from torrent**.
-- **Settings → Extensions → Torrent Metadata**: torrent folders, cover hosts, tag naming.
+- **Settings → Extensions → Torrent Metadata**: torrent folders, cover hosts, tag naming — the
+  batch page's gear icon goes straight there.
 
 Then drop a `.torrent` on a video, or add a folder of torrents in settings and open **Torrent
 Matches**.
