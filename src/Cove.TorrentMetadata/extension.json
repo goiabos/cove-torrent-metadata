@@ -1,7 +1,7 @@
 {
   "id": "io.github.goiabos.torrent-metadata",
   "name": "Torrent Metadata",
-  "version": "0.8.0",
+  "version": "0.8.1",
   "minCoveVersion": "1.3.1",
   "description": "Reads tags, performers, studio and cover art out of the metadata block Luminance-based trackers inject into their .torrent files, and offers them for review on matching videos in your library.",
   "author": "Cove community",
